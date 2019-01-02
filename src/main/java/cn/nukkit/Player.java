@@ -1692,8 +1692,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                             if (this.inAirTicks < 100) {
                                 //this.sendSettings();
                                 this.setMotion(new Vector3(0, expectedVelocity, 0));
-                            } else if (this.kick(PlayerKickEvent.Reason.FLYING_DISABLED, "Flying is not enabled on this server")) {
-                                return false;
                             }
                         }
                         if (onLadder) {
@@ -2270,10 +2268,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 case ProtocolInfo.ADVENTURE_SETTINGS_PACKET:
                     //TODO: player abilities, check for other changes
                     AdventureSettingsPacket adventureSettingsPacket = (AdventureSettingsPacket) packet;
-                    if (adventureSettingsPacket.getFlag(AdventureSettingsPacket.ALLOW_FLIGHT) && !this.getAdventureSettings().get(Type.ALLOW_FLIGHT)) {
-                        this.kick(PlayerKickEvent.Reason.FLYING_DISABLED, "Flying is not enabled on this server");
-                        break;
-                    }
                     PlayerToggleFlightEvent playerToggleFlightEvent = new PlayerToggleFlightEvent(this, adventureSettingsPacket.getFlag(AdventureSettingsPacket.ALLOW_FLIGHT));
                     this.server.getPluginManager().callEvent(playerToggleFlightEvent);
                     if (playerToggleFlightEvent.isCancelled()) {
