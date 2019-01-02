@@ -1,13 +1,11 @@
 package cn.nukkit.blockentity;
 
+import cn.nukkit.Player;
 import cn.nukkit.block.Block;
 import cn.nukkit.block.BlockAir;
 import cn.nukkit.entity.Entity;
 import cn.nukkit.entity.item.EntityItem;
-import cn.nukkit.inventory.FurnaceInventory;
-import cn.nukkit.inventory.HopperInventory;
-import cn.nukkit.inventory.Inventory;
-import cn.nukkit.inventory.InventoryHolder;
+import cn.nukkit.inventory.*;
 import cn.nukkit.item.Item;
 import cn.nukkit.item.ItemBlock;
 import cn.nukkit.level.format.FullChunk;
@@ -17,7 +15,8 @@ import cn.nukkit.math.SimpleAxisAlignedBB;
 import cn.nukkit.nbt.NBTIO;
 import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.nbt.tag.ListTag;
-import cn.nukkit.inventory.Fuel;
+
+import java.util.HashSet;
 
 /**
  * Created by CreeperFace on 8.5.2017.
@@ -64,7 +63,7 @@ public class BlockEntityHopper extends BlockEntitySpawnable implements Inventory
 
     @Override
     public String getName() {
-        return this.hasName() ? this.namedTag.getString("CustomName") : "Furnace";
+        return this.hasName() ? this.namedTag.getString("CustomName") : "Hopper";
     }
 
     @Override
@@ -158,15 +157,13 @@ public class BlockEntityHopper extends BlockEntitySpawnable implements Inventory
         this.transferCooldown--;
 
         if (!this.isOnTransferCooldown()) {
-            boolean transfer = this.transferItemsOut();
-            boolean pickup = this.pickupDroppedItems();
-
-            if (transfer || pickup) {
-                //this.setTransferCooldown(8); TODO: maybe we should update hopper every tick if nothing happens?
-                this.chunk.setChanged(true);
+            if (this.transferItemsOut()) {
+                this.setTransferCooldown(8);
+                setDirty();
+            } else if (this.pickupDroppedItems()) {
+                this.setTransferCooldown(8);
+                setDirty();
             }
-
-            this.setTransferCooldown(8);
         }
 
 
@@ -258,89 +255,109 @@ public class BlockEntityHopper extends BlockEntitySpawnable implements Inventory
         return update;
     }
 
+    @Override
+    public void close() {
+        if (!closed) {
+            for (Player player : new HashSet<>(this.getInventory().getViewers())) {
+                player.removeWindow(this.getInventory());
+            }
+            super.close();
+        }
+    }
+
+    @Override
+    public void onBreak() {
+
+        for (Item content : inventory.getContents().values()) {
+            level.dropItem(this, content);
+        }
+    }
+
     public boolean transferItemsOut() {
         if (this.inventory.isEmpty()) {
             return false;
         }
 
-        if (!(this.level.getBlockEntity(this.down()) instanceof BlockEntityHopper)) {
-            BlockEntity be = this.level.getBlockEntity(this.getSide(BlockFace.fromIndex(this.level.getBlockDataAt(this.getFloorX(), this.getFloorY(), this.getFloorZ()))));
+        BlockEntity be = this.level.getBlockEntity(this.getSide(BlockFace.fromIndex(this.level.getBlockDataAt(this.getFloorX(), this.getFloorY(), this.getFloorZ()))));
+        
+        if (be instanceof BlockEntityHopper && this.getBlock().getDamage() == 0) return false;
+        //Fix for furnace inputs
+        if (be instanceof BlockEntityFurnace) {
+            BlockEntityFurnace furnace = (BlockEntityFurnace) be;
+            FurnaceInventory inventory = furnace.getInventory();
+            if (inventory.isFull()) {
+                return false;
+            }
 
-            //Fix for furnace inputs
-            if (be instanceof BlockEntityFurnace) {
-                BlockEntityFurnace furnace = (BlockEntityFurnace) be;
-                FurnaceInventory inventory = furnace.getInventory();
-                if (inventory.isFull()) {
-                    return false;
-                }
-                for (int i = 0; i < inventory.getSize(); i++) {
-                    Item item = this.inventory.getItem(i);
-                    if (item.getId() != 0 && item.getCount() > 0) {
-                        Item itemToAdd = item.clone();
-                        itemToAdd.setCount(1);
-                        //If it is a fuel
-                        if (Fuel.duration.containsKey(item.getId())) {
-                            if (inventory.getFuel().getId() == Item.AIR) {
-                                inventory.setFuel(itemToAdd);
+            for (int i = 0; i < this.inventory.getSize(); i++) {
+                Item item = this.inventory.getItem(i);
+                if (item.getId() != 0 && item.getCount() > 0) {
+                    Item itemToAdd = item.clone();
+                    itemToAdd.setCount(1);
+                    
+                    //Check direction of hopper
+                    if (this.getBlock().getDamage() == 0) {
+                        if (inventory.getSmelting().getId() == Item.AIR) {
+                            inventory.setSmelting(itemToAdd);
+                            item.count--;
+                            return true;
+                        } else if (inventory.getSmelting().getId() == itemToAdd.getId()){
+                            Item smelting = inventory.getSmelting();
+                            if (smelting.count < smelting.getMaxStackSize()) {
+                                smelting.count++;
+                                inventory.setSmelting(smelting);
                                 item.count--;
-                            } else if (inventory.getFuel().getId() == itemToAdd.getId()) {
-                                Item fuel = inventory.getFuel();
-                                if (fuel.count < fuel.getMaxStackSize())
-                                {
-                                    fuel.count++;
-                                    inventory.setFuel(fuel);
-                                    item.count--;
-                                }
-                            }
-                        } else { //Must be an input, try to cook it
-                            if (inventory.getSmelting().getId() == Item.AIR) {
-                                inventory.setSmelting(itemToAdd);
-                                item.count--;
-                            } else if (inventory.getSmelting().getId() == itemToAdd.getId()) {
-                                Item smelting = inventory.getSmelting();
-                                if (smelting.count < smelting.getMaxStackSize())  {
-                                    smelting.count++;
-                                    inventory.setSmelting(smelting);
-                                    item.count--;
-                                }
+                                return true;
                             }
                         }
-                        inventory.sendContents(inventory.getViewers()); //whats wrong?
-                        this.inventory.setItem(i, item);
-                        return true;
-                    }
-                }
-            } else if (be instanceof InventoryHolder) {
-                Inventory inventory = ((InventoryHolder) be).getInventory();
-
-                if (inventory.isFull()) {
-                    return false;
-                }
-
-                for (int i = 0; i < inventory.getSize(); i++) {
-                    Item item = this.inventory.getItem(i);
-
-                    if (item.getId() != 0 && item.getCount() > 0) {
-                        Item itemToAdd = item.clone();
-                        itemToAdd.setCount(1);
-
-                        Item[] items = inventory.addItem(itemToAdd);
-
-                        if (items.length > 0) {
-                            continue;
+                    } else if (Fuel.duration.containsKey(item.getId())) {
+                        if (inventory.getFuel().getId() == Item.AIR){
+                            inventory.setFuel(itemToAdd);
+                            item.count--;
+                            return true;
+                        } else if (inventory.getFuel().getId() == itemToAdd.getId()){
+                            Item fuel = inventory.getFuel();
+                            if (fuel.count < fuel.getMaxStackSize()) {
+                                fuel.count++;
+                                inventory.setFuel(fuel);
+                                item.count--;
+                                return true;
+                            }
                         }
-
-                        inventory.sendContents(inventory.getViewers()); //whats wrong?
-                        item.count--;
-                        this.inventory.setItem(i, item);
-                        return true;
                     }
+                    inventory.sendContents(inventory.getViewers());
+                    this.inventory.setItem(i, item);
                 }
             }
 
-            //TODO: check for minecart
-        }
+        } else if (be instanceof InventoryHolder) {
+            Inventory inventory = ((InventoryHolder) be).getInventory();
 
+            if (inventory.isFull()) {
+                return false;
+            }
+
+            for (int i = 0; i < this.inventory.getSize(); i++) {
+                Item item = this.inventory.getItem(i);
+
+                if (item.getId() != 0 && item.getCount() > 0) {
+                    Item itemToAdd = item.clone();
+                    itemToAdd.setCount(1);
+
+                    Item[] items = inventory.addItem(itemToAdd);
+
+                    if (items.length > 0) {
+                        continue;
+                    }
+
+                    inventory.sendContents(inventory.getViewers()); //whats wrong?
+                    item.count--;
+                    this.inventory.setItem(i, item);
+                    return true;
+                }
+            }
+        }
+        //TODO: check for minecart
         return false;
     }
 

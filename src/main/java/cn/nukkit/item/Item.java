@@ -274,6 +274,7 @@ public class Item implements Cloneable, BlockID, ItemID {
             list[ELYTRA] = ItemElytra.class; //444
 
             //TODO: list[SHULKER_SHELL] = ItemShulkerShell.class; //445
+            list[BANNER] = ItemBanner.class; //446
             
             list[TRIDENT] = ItemTrident.class; //455
 
@@ -284,6 +285,7 @@ public class Item implements Cloneable, BlockID, ItemID {
             list[CLOWNFISH] = ItemClownfish.class; //461
             list[PUFFERFISH] = ItemPufferfish.class; //462
             list[COOKED_SALMON] = ItemSalmonCooked.class; //463
+            list[DRIED_KELP] = ItemDriedKelp.class; //464
 
             list[GOLDEN_APPLE_ENCHANTED] = ItemAppleGoldEnchanted.class; //466
             

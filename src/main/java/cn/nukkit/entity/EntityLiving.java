@@ -3,6 +3,7 @@ package cn.nukkit.entity;
 import cn.nukkit.Player;
 import cn.nukkit.Server;
 import cn.nukkit.block.Block;
+import cn.nukkit.block.BlockMagma;
 import cn.nukkit.entity.data.ShortEntityData;
 import cn.nukkit.entity.passive.EntityWaterAnimal;
 import cn.nukkit.event.entity.*;
@@ -72,7 +73,7 @@ public abstract class EntityLiving extends Entity implements EntityDamageable {
         if (this.isAlive() && !wasAlive) {
             EntityEventPacket pk = new EntityEventPacket();
             pk.eid = this.getId();
-            pk.eid = EntityEventPacket.RESPAWN;
+            pk.event = EntityEventPacket.RESPAWN;
             Server.broadcastPacket(this.hasSpawned.values(), pk);
         }
     }
@@ -252,6 +253,10 @@ public abstract class EntityLiving extends Entity implements EntityDamageable {
                 }
             }
         }
+
+        // Used to check collisions with magma blocks
+        Block block = this.level.getBlock((int) x, (int) y - 1, (int) z);
+        if (block instanceof BlockMagma) block.onEntityCollide(this);
 
         Timings.livingEntityBaseTickTimer.stopTiming();
 
